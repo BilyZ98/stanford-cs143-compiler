@@ -69,10 +69,10 @@ void set_error_msg(const char *msg) {
 DARROW          =>
 DIGIT  [0-9]
 LETTER [a-zA-Z]
-INTEGER DIGIT+
+INTEGER {DIGIT}+
 TYPE_IDENTIFIER [A-Z][a-zA-Z0-9_]* 
 OBJECT_IDENTIFIER [a-z][a-zA-Z0-9_]* 
-WHITESPACE [ \t\n\f\r\v]+
+WHITESPACE [ \t\f\r\v]+
 IDENTIFIER TYPE_IDENTIFIER|OBJECT_IDENTIFIER
 KEYWORDS class|else|fi|if|in|inherits|isvoid|let|loop|pool|then|while|case|esac|new|of|not|t(r|R)(u|U)(e|E)|f(a|A)(l|L)(s|S)(e|E)
 program  [class]+
@@ -288,10 +288,7 @@ feature IDENTIFIER([formal(formal)*])
   return ELSE;
 }
 
-f(?i:alse) {
-  yylval.boolean = 0;
-  return BOOL_CONST;
-}
+
 
 (?i:fi) {
    return FI;
@@ -356,25 +353,35 @@ f(?i:alse) {
   return NOT;
 }
 
+f(?i:alse) {
+  yylval.boolean = 0;
+  return BOOL_CONST;
+}
+
 t(?i:rue) {
   yylval.boolean = 1;
   return BOOL_CONST;
 }
+
+
+{INTEGER} {
+  yylval.symbol = inttable.add_string(yytext);
+  return INT_CONST;
+}
+
+
 {TYPE_IDENTIFIER} {
   yylval.symbol = idtable.add_string(yytext);
-  /*yylex = TYPEID;*/
   return TYPEID;
 }
 
 {OBJECT_IDENTIFIER} {
   yylval.symbol = idtable.add_string(yytext);
-  /*yylex = OBJECTID;*/
   return OBJECTID;
 }
 
-{INTEGER} {
-  yylval.symbol = inttable.add_string(yytext);
-  return INT_CONST;
+{WHITESPACE} {
+  
 }
 
 "\n" {
@@ -426,6 +433,9 @@ t(?i:rue) {
   * =====
   */
 
-
+[^\n] {
+  yylval.error_msg = yytext;
+  return ERROR;
+}
 
 %%
