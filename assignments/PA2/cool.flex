@@ -46,6 +46,7 @@ extern YYSTYPE cool_yylval;
 
 bool in_comment = false, in_string = false;
 int comment_level = 0;
+int cur_str_len = 0;
 
 %}
 
@@ -112,7 +113,7 @@ POOL_KEYWORD        {p}{o}{o}{l}
 THEN_KEYWORD        {t}{h}{e}{n}
 WHILE_KEYWORD       {w}{h}{i}{l}{e}
 CASE_KEYWORD        {c}{a}{s}{e}
-ESAC_KEYWORD       {e}{s}{a}{c}
+ESAC_KEYWORD        {e}{s}{a}{c}
 OF_KEYWORD          {o}{f}
 NEW_KEYWORD         {n}{e}{w}
 ISVOID_KEYWORD      {i}{s}{v}{o}{i}{d}
@@ -129,6 +130,7 @@ WHITESPACE          [ \n\f\r\t\v]+
 
 OPERATOR            \.|@|~|\*|/|\+|-|<|=
 
+%x              IN_STRING IN_COMMENT
 
 %%
 
@@ -150,7 +152,7 @@ OPERATOR            \.|@|~|\*|/|\+|-|<|=
     return (INHERITS);
 }
 
-{LET_KEYWORD} {return (LET)}
+{LET_KEYWORD} {return (LET);}
 
 
 {LOOP_KEYWORD} { return (LOOP);}
@@ -174,10 +176,74 @@ OPERATOR            \.|@|~|\*|/|\+|-|<|=
 {ISVOID_KEYWORD} { return (ISVOID);}
 
 
-{STRING_CONST}  { 
+\"              {
+    printf("string begin\n");
+    cur_str_len = 0;
+    string_buf_ptr = string_buf;
+    BEGIN IN_STRING;
+}
 
+<IN_STRING>\"  {
+  BEGIN(INITIAL);
+  if (cur_str_len > MAX_STR_CONST)  {
+      cool_yylval.error_msg = "String constant too long";
+      return ERROR;
+    }
+  printf("string end\n");
+  return (STR_CONST);
+}
+
+<IN_STRING>\\(\n) {
+  string_buf[cur_str_len++] = '\n';
+}
+
+<IN_STRING>\n   {
+        cool_yylval.error_msg= "Unterminated string constant";
+        BEGIN 0;
+        curr_lineno++;
+        return ERROR;
 
 }
+
+
+
+    
+
+<IN_STRING>\0     {
+    cool_yylval.error_msg = "String contains null character";
+    BEGIN 0;
+    return ERROR;
+  }
+
+<IN_STRING>\\b  {
+  string_buf[cur_str_len++] = '\b'; 
+}
+
+<IN_STRING>\\t  {
+    string_buf[cur_str_len++] = '\t';
+}
+
+<IN_STRING>\\n {
+    printf("got newline \n");
+    string_buf[cur_str_len++] = '\n';
+  }
+
+<IN_STRING>\\f {
+    string_buf[cur_str_len++] = '\f';
+}
+
+<IN_STRING>\\{STRING_CHAR} {
+    string_buf[cur_str_len++] = yytext[0]; 
+}
+
+<IN_STRING>{STRING_CHAR}+ {
+  memcpy(string_buf+cur_str_len, yytext, yyleng);    
+
+  cur_str_len += yyleng;
+}
+
+
+
 {TYPE_IDENTIFIER} { 
   /* printf("find typeid:%s\n", yytext); */
   cool_yylval.symbol = stringtable.add_string(yytext);

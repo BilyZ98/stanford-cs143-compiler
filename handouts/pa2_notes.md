@@ -12,8 +12,11 @@ that match the input stream from the code file.
 
 
 # Lex file structure 
+
 So why are we illustrating the file strucutre of the Lex file,
 because I want to remember it and tell what each part does.
+You need to know what each part does to write a working lexer.
+
 ```
 %{
 Declaration
@@ -108,13 +111,20 @@ So why these two part ?
   matched string with yytext[yyleng -1]  
 
 - yymore()
+  match the chars following the current match string to expand the current matched one with the current regular expression.
 
 - yyless()
+  move the matched cursor back 
 
 - REJECT
+  use following regular expressions down below the current 
+  regular expression to see if there is another regular expression also matches the current string.
 
 - ECHO 
+  print the current matched string.
 
+- %s, or %x start condition 
+  
 Some special examples for regular expression.
 
 1. Matched the double quotes in the string .
