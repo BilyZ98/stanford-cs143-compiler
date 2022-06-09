@@ -85,10 +85,11 @@ z                   [zZ]
 DARROW              =>
 DIGIT               [0-9]
 INTEGER             {DIGIT}+
-STRING_CHAR         [a-zA-Z0-9_]
+ID_STRING_CHAR         [a-zA-Z0-9_]
+STRING_CHAR             [^\0<EOF>]
 /* STRING              {STRING_CHAR}+ */
-TYPE_IDENTIFIER     [A-Z]{STRING_CHAR}*
-OBJECT_IDENTIFIER   [a-z]{STRING_CHAR}*
+TYPE_IDENTIFIER     [A-Z]{ID_STRING_CHAR}*
+OBJECT_IDENTIFIER   [a-z]{ID_STRING_CHAR}*
 COOL_IDENTIFIER     self|SELF_TYPE
 
 /* we need to consider new line char in the string situration
@@ -102,11 +103,12 @@ COMMENTS            (--[^\n(--)]*)|(\(\*[^\*\)]*)
 
 IF_KEYWORD          {i}{f}
 FI_KEYWORD          {f}{i}
-BOOL_CONST          f{a}{l}{s}{e}|t{r}{u}{e}
+BOOL_CONST_TRUE     t{r}{u}{e}
+BOOL_CONST_FALSE    f{a}{l}{s}{e}
 CLASS_KEYWORD       {c}{l}{a}{s}{s}
 ELSE_KEYWORD        {e}{l}{s}{e}
 IN_KEYWORD          {i}{n} 
-INHERITS_KEYWORD    {i}{n}{h}{i}{t}{s}
+INHERITS_KEYWORD    {i}{n}{h}{e}{r}{i}{t}{s}
 LET_KEYWORD         {l}{e}{t}
 LOOP_KEYWORD        {l}{o}{o}{p}
 POOL_KEYWORD        {p}{o}{o}{l}
@@ -130,7 +132,7 @@ WHITESPACE          [ \n\f\r\t\v]+
 
 OPERATOR            \.|@|~|\*|/|\+|-|<|=
 
-%x              IN_STRING IN_COMMENT
+%x              IN_STRING IN_COMMENT IN_INLINE_COMMENT
 
 %%
 
@@ -177,19 +179,19 @@ OPERATOR            \.|@|~|\*|/|\+|-|<|=
 
 
 \"              {
-    printf("string begin\n");
     cur_str_len = 0;
     string_buf_ptr = string_buf;
     BEGIN IN_STRING;
 }
 
 <IN_STRING>\"  {
-  BEGIN(INITIAL);
+  BEGIN 0;
   if (cur_str_len > MAX_STR_CONST)  {
       cool_yylval.error_msg = "String constant too long";
       return ERROR;
     }
-  printf("string end\n");
+  string_buf[cur_str_len++] = '\0';
+  cool_yylval.symbol = stringtable.add_string(string_buf);
   return (STR_CONST);
 }
 
@@ -206,11 +208,14 @@ OPERATOR            \.|@|~|\*|/|\+|-|<|=
 }
 
 
-
-    
-
 <IN_STRING>\0     {
     cool_yylval.error_msg = "String contains null character";
+    BEGIN 0;
+    return ERROR;
+}
+
+<IN_STRING><<EOF>>   {
+    yylval.error_msg = "EOF in string constant";
     BEGIN 0;
     return ERROR;
   }
@@ -224,7 +229,6 @@ OPERATOR            \.|@|~|\*|/|\+|-|<|=
 }
 
 <IN_STRING>\\n {
-    printf("got newline \n");
     string_buf[cur_str_len++] = '\n';
   }
 
@@ -232,17 +236,91 @@ OPERATOR            \.|@|~|\*|/|\+|-|<|=
     string_buf[cur_str_len++] = '\f';
 }
 
-<IN_STRING>\\{STRING_CHAR} {
-    string_buf[cur_str_len++] = yytext[0]; 
+<IN_STRING>\\[^\n\0] {
+    string_buf[cur_str_len++] = yytext[1]; 
 }
 
-<IN_STRING>{STRING_CHAR}+ {
-  memcpy(string_buf+cur_str_len, yytext, yyleng);    
-
+<IN_STRING>[^\\\n\"]+   {
+  memcpy(string_buf+cur_str_len, yytext, yyleng);
   cur_str_len += yyleng;
 }
 
 
+
+--        {
+    BEGIN IN_INLINE_COMMENT;
+}
+
+
+
+<IN_INLINE_COMMENT>\n {
+    curr_lineno++;
+    BEGIN 0;
+}
+
+<IN_INLINE_COMMENT><<EOF>> {
+  BEGIN 0;
+}
+
+<IN_INLINE_COMMENT>[^\n]+ {
+
+}
+
+\(\*           {
+    comment_level += 1; 
+    BEGIN IN_COMMENT;
+}
+
+
+\*\)          {
+    yylval.error_msg = "Unmatched *)";
+    return ERROR;
+}
+
+<IN_COMMENT>\(\*  {
+    comment_level += 1;
+  }
+
+<IN_COMMENT>\*\) {
+    comment_level -= 1;
+
+    if(comment_level == 0) {
+        BEGIN 0;
+    }
+}
+
+
+<IN_COMMENT>\n  {
+    curr_lineno++;
+}
+
+<IN_COMMENT><<EOF>>   {
+    yylval.error_msg = "EOF in comment";
+    BEGIN 0;
+    return ERROR;
+}
+
+<IN_COMMENT>[^\n(*]*  {
+  // do not match the "(*" since the lex will
+  // try to match as long as possible and 
+  // (* is the start of comment 
+}
+
+<IN_COMMENT>[(*] {
+  // match (  or * independently.
+  // this is shorter compared to previous reg expresison.
+}
+
+
+{BOOL_CONST_TRUE}  {
+  yylval.boolean = 1;
+  return BOOL_CONST;
+  }
+
+{BOOL_CONST_FALSE} {
+    yylval.boolean = 0;
+    return BOOL_CONST;
+  }
 
 {TYPE_IDENTIFIER} { 
   /* printf("find typeid:%s\n", yytext); */
@@ -263,8 +341,57 @@ OPERATOR            \.|@|~|\*|/|\+|-|<|=
 
 {INTEGER}   { 
 
+  cool_yylval.symbol = inttable.add_string(yytext);
+  return (INT_CONST); 
   printf("found a integer, %s\n", yytext); 
 }
+
+
+{LE_KEYWORD}      {
+    return (LE);
+}
+
+
+{ASSIGN_KEYWORD}   {
+    return (ASSIGN);
+}
+
+
+
+
+
+"+"  { return  int('+');}  
+
+"-"  { return int('-'); }
+
+"*"  { return int('*');}
+
+"/"  { return int('/');}
+
+";"  { return int(';');}
+
+"."  { return int('.');}
+
+"="  { return int('=');}
+
+","  { return int(',');}
+
+":"  { return int(':');}
+
+"("  { return int('(');}
+
+")"  { return int(')');}
+
+"@"  { return int('@');}
+
+"~"  { return int('~');}
+
+"<"  { return int('<');}
+
+
+"{"  { return int('{');}
+
+"}"  { return int('}');}
 
 [^\n]      { printf("");}
 
@@ -273,7 +400,6 @@ OPERATOR            \.|@|~|\*|/|\+|-|<|=
   curr_lineno++;
   }
 
-.             ;
 
  /*
   * Keywords are case-insensitive except for the values true and false,

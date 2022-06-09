@@ -1,0 +1,15 @@
+1,14d0
+< ERROR "!"
+< ERROR "#"
+< ERROR "$"
+< ERROR "%"
+< ERROR "^"
+< ERROR "&"
+< ERROR "_"
+< ERROR ">"
+< ERROR "?"
+< ERROR "`"
+< ERROR "["
+< ERROR "]"
+< LONGERROR
+< ERROR "|"

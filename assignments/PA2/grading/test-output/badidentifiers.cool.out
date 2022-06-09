@@ -1,0 +1,19 @@
+OBJECTID inky
+'.'
+OBJECTID binky
+'.'
+OBJECTID winky
+'.'
+OBJECTID dot
+INT_CONST 1
+OBJECTID thatwasanumber
+OBJECTID two
+'-'
+OBJECTID objects
+TYPEID Two
+'-'
+TYPEID Types
+OBJECTID underscore
+TYPEID Type
+'-'
+OBJECTID object
