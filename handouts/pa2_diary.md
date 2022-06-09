@@ -69,3 +69,38 @@ each regular expression ?
   #17 STR_CONST "concat"
   ```
 
+5. order between regular expressions.
+
+  I am writing the cool.flex file and try to matched the false and true boolean keywords, but the flex gives the warning that the true and false rule cannot be matched, then I googled it, the stackoverflow answers mention that this situation happens when you have rule earlier in the flex file that is the superset of your current regular expression, so  your regular expression will not be matched.
+  
+  The problematic code is below 
+  ```
+
+  {TYPE_IDENTIFIER} { 
+  /* printf("find typeid:%s\n", yytext); */
+  cool_yylval.symbol = stringtable.add_string(yytext);
+  return (TYPEID); 
+  }; 
+
+
+
+{OBJECT_IDENTIFIER} {
+    cool_yylval.symbol = stringtable.add_string(yytext);
+    return (OBJECTID);
+}
+
+  {bool_const_false} {
+      ....
+    }
+
+
+  {bool_const_true} {
+      ....
+    }
+
+  ```
+
+
+  The TYPE_IDENTIFIER regular expression contains the true and false keyword, so the true and  false keyword will be not matched and will be return as objectid or typeid.
+
+  The solution is move the false and true keyword before the TYPE_IDENTIFIER and OBJECT_IDENTIFIER.
