@@ -51,7 +51,7 @@
   ```
   /assignment/PA2/README
   ```
-  this will help your get a sense of what each file in the PA2 folder does and it tells you that you could strdup() function in your coo.flex file, I use it in my code to handle the invalid char error.
+  this will help your get a sense of what each file in the PA2 folder does and it tells you that you could use strdup() function in your coo.flex file, I use it in my code to handle the invalid char error.
 
 # How do we implement a lexical analyzer?  
 
