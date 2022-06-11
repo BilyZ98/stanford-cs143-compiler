@@ -199,3 +199,64 @@ each regular expression ?
   duplicate length checking code.
 
 
+7. Mistake: ignore the whitespace.
+
+  I am running the test script after I fix the string problem above.
+
+  It turns out that my scores is lower than before even if I match the string right.
+
+  And I checked out the diff results,
+  it shows that there is some whitespace before each of the token return by the lexer. The output is as below.
+
+  ```
+#75 ')'
+#75 ')'
+#75 ';'
+                            #76 OBJECTID i
+ #76 ASSIGN
+ #76 OBJECTID i
+ #76 '+'
+ #76 INT_CONST 1
+#76 ';'
+                        #77 '}'
+                    #78 POOL
+                  #79 ')'
+               #80 ')'
+#80 ';'
+              #81 OBJECTID int
+#81 ';'
+            #82 '}'
+        #83 ')'
+     #84 '}'
+#84 ';'
+    #90 OBJECTID i2a
+
+  ```
+
+
+
+
+  So I realize that it's because I 
+  did not write code to ignore the whitespace in the source code text file and the flex will just print the chars in the source file when you flex file don't have rule to match these chars.
+
+  And I add the following code to ignore the whitespace.
+
+  ```
+
+  %%
+  \n          {
+    curr_lineno++;
+  }
+
+  [\t\r\v\f ]  {
+  }
+
+  [^\t\r\v\f ]      {
+    yylval.error_msg = strdup(yytext); 
+    return ERROR;
+  }
+  %%
+
+
+  ```
+
