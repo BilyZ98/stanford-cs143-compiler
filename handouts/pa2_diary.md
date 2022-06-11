@@ -104,3 +104,98 @@ each regular expression ?
   The TYPE_IDENTIFIER regular expression contains the true and false keyword, so the true and  false keyword will be not matched and will be return as objectid or typeid.
 
   The solution is move the false and true keyword before the TYPE_IDENTIFIER and OBJECT_IDENTIFIER.
+
+6. Use yytext and yymore in string constant matching process.
+
+  At first  I use string_buf[1024] from the cool.flex file to store the final string literal. 
+
+  The code is like below.
+  
+  ```
+    %{ 
+    char string_buf[1024];
+    int cur_str_len = 0;
+    %x IN_STRING 
+    %}
+
+    %%
+
+    
+
+    \"  {
+      cur_str_len = 0;
+      BEGIN IN_STRING;
+
+      }
+
+    <IN_STRING>\\t  {
+      string_buf[cur_str_len++] = '\t';
+    }
+
+
+    <IN_STRING>\"    {
+        
+        if(cur_str_len > MAX_LEN) {
+            return ERROR;
+        }
+
+    }
+  ```
+
+
+  As you can see from the code, it's prone to the long string error, I need to add test code at every <IN_STRING> rule 
+ to avoid the buffer overflow and out-of-bound string access fault, which is not an appropriate way to deal with such error.
+
+
+ So I decided to use yymore and process the \ translation symbol at the end of string.
+
+ The code is like this.
+
+  ```
+    %{
+      char string_buf[1024];
+      %x IN_STRING
+    %} 
+
+    %%
+    
+    \"    {
+        BEGIN IN_STRING;
+        yymore();
+      }
+
+
+    <IN_STRING>\"  {
+
+
+      for(int i=0; i < yyleng; i++) {
+          if(i >= MAX_LEN) {
+            return ERROR;     
+          }
+
+          // normal case
+          *string_buf_ptr  = yytext[i];
+          string_buf_ptr++;
+      }
+    }
+
+
+    <IN_STRING>\\\n   {
+        cur_lineno++;
+        yymore();
+      }
+
+    <IN_STRING>\\[^\n] {
+      yymore();
+
+    }
+
+    %%
+  ```
+
+  And this implementation of string matching will only do 
+  string length check at the end of the string, which will
+  prevent the out-of-bound array access and save us from 
+  duplicate length checking code.
+
+

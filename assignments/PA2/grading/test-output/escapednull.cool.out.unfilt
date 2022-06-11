@@ -1,3 +1,0 @@
-#name "./escapednull.cool"
-\#1 ERROR "String contains null character"
-#2 ERROR "Unterminated string constant"

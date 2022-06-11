@@ -48,6 +48,9 @@ bool in_comment = false, in_string = false;
 int comment_level = 0;
 int cur_str_len = 0;
 
+
+bool string_has_null = false;
+
 %}
 
 /*
@@ -86,7 +89,7 @@ DARROW              =>
 DIGIT               [0-9]
 INTEGER             {DIGIT}+
 ID_STRING_CHAR         [a-zA-Z0-9_]
-STRING_CHAR             [^\0<EOF>]
+STRING_CHAR             [^\0]
 /* STRING              {STRING_CHAR}+ */
 TYPE_IDENTIFIER     [A-Z]{ID_STRING_CHAR}*
 OBJECT_IDENTIFIER   [a-z]{ID_STRING_CHAR}*
@@ -177,72 +180,119 @@ OPERATOR            \.|@|~|\*|/|\+|-|<|=
 
 {ISVOID_KEYWORD} { return (ISVOID);}
 
+{NOT_KEYWORD}  { return (NOT);}
+
 
 \"              {
-    cur_str_len = 0;
-    string_buf_ptr = string_buf;
     BEGIN IN_STRING;
+    string_has_null = false;
+    yymore();
 }
 
-<IN_STRING>\"  {
-  BEGIN 0;
-  if (cur_str_len > MAX_STR_CONST)  {
-      cool_yylval.error_msg = "String constant too long";
-      return ERROR;
-    }
-  string_buf[cur_str_len++] = '\0';
-  cool_yylval.symbol = stringtable.add_string(string_buf);
-  return (STR_CONST);
-}
+<IN_STRING>\"    {
+   // end processing 
 
-<IN_STRING>\\(\n) {
-  string_buf[cur_str_len++] = '\n';
+
+    BEGIN 0;
+   if(string_has_null) {
+    yylval.error_msg = "String contains null character";
+    return ERROR;
+   }
+    
+    string_buf_ptr = string_buf;
+   for(int i=1; i < yyleng-1; i++) {
+     int cur_len = string_buf_ptr - string_buf;
+     if(cur_len > MAX_STR_CONST) {
+         yylval.error_msg = "String constant too long";
+         return ERROR;
+     }
+
+      if(yytext[i] == '\\') {
+        char next_char = yytext[i+1];
+
+        switch (next_char){
+            case 't':
+              *string_buf_ptr = '\t';
+              break;
+
+            case 'b':
+              *string_buf_ptr = '\b';
+              break;
+
+            case 'n':
+              *string_buf_ptr = '\n';
+              break;
+
+            case 'f':
+              *string_buf_ptr = '\f';
+              break;
+
+            default:
+              *string_buf_ptr = next_char;
+          }
+          i++;
+      } else {
+          *string_buf_ptr = yytext[i];
+      }
+
+      string_buf_ptr++;
+   }
+  
+    *string_buf_ptr = '\0';
+    string_buf_ptr++;
+   int str_len = string_buf_ptr - string_buf;
+   if(str_len > MAX_STR_CONST)  {
+       yylval.error_msg = "String constant too long";
+       return ERROR;
+     }
+    yylval.symbol = stringtable.add_string(string_buf);
+
+   return STR_CONST;
 }
 
 <IN_STRING>\n   {
-        cool_yylval.error_msg= "Unterminated string constant";
-        BEGIN 0;
-        curr_lineno++;
-        return ERROR;
-
+  yylval.error_msg =  "Unterminated string constant";
+  BEGIN 0;
+  return ERROR;
 }
 
 
-<IN_STRING>\0     {
-    cool_yylval.error_msg = "String contains null character";
-    BEGIN 0;
-    return ERROR;
+<IN_STRING>\\\n  {
+    curr_lineno++; 
+    yymore();
 }
 
-<IN_STRING><<EOF>>   {
-    yylval.error_msg = "EOF in string constant";
-    BEGIN 0;
-    return ERROR;
-  }
+<IN_STRING>(\0)|(\\\0) { 
 
-<IN_STRING>\\b  {
-  string_buf[cur_str_len++] = '\b'; 
+  string_has_null = true;
+  yymore();
 }
 
-<IN_STRING>\\t  {
-    string_buf[cur_str_len++] = '\t';
+
+<IN_STRING><<EOF>>  {
+  yylval.error_msg = "EOF in string constant";
+  BEGIN 0;
+  yyrestart(yyin);
+  return ERROR;
 }
 
-<IN_STRING>\\n {
-    string_buf[cur_str_len++] = '\n';
-  }
-
-<IN_STRING>\\f {
-    string_buf[cur_str_len++] = '\f';
+<IN_STRING>\\[^\n]  {
+    // this will match \<EOF> and \(\0)
+    // this will also accept the \"
+    yymore();
 }
 
-<IN_STRING>\\[^\n\0] {
-    string_buf[cur_str_len++] = yytext[1]; 
-}
 
-<IN_STRING>[^\\\n\"]+   {
-  memcpy(string_buf+cur_str_len, yytext, yyleng);
-  cur_str_len += yyleng;
+<IN_STRING>[^\\\n\0\"]*  {
+  // what if we have a NULL and following characters ? 
+  // will this regular expression executed or the previous one ?
+
+  // I should do some test to find out .
+  // In my option NULL will be matched to this 
+  // expression instead of the previous one.
+  // I tested it, it will match the null character,
+  // so I add \0 in the exclued set.
+  yymore();
 }
 
 
@@ -335,6 +385,8 @@ OPERATOR            \.|@|~|\*|/|\+|-|<|=
     return (OBJECTID);
 }
 
+
+
  /*
   *  The multiple-character operators.
   */
@@ -343,7 +395,6 @@ OPERATOR            \.|@|~|\*|/|\+|-|<|=
 
   cool_yylval.symbol = inttable.add_string(yytext);
   return (INT_CONST); 
-  printf("found a integer, %s\n", yytext); 
 }
 
 
@@ -393,12 +444,23 @@ OPERATOR            \.|@|~|\*|/|\+|-|<|=
 
 "}"  { return int('}');}
 
-[^\n]      { printf("");}
+\0   {
+  yylval.error_msg = "null symbol";
+  return ERROR;
+}
 
 \n          {
-  printf("");
   curr_lineno++;
-  }
+}
+
+[\t\r\v\f ]  {
+}
+
+[^\t\r\v\f ]      {
+  yylval.error_msg = strdup(yytext); 
+  return ERROR;
+}
+
 
 
  /*
